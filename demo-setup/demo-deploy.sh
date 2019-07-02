@@ -14,7 +14,7 @@ for ((i = 0; i < ${#VMNAMES[@]}; i++)); do
     NAME="${VMNAMES[$i]}"
 
     # Deploy from ovf
-    ovftool -tt=vmx --lax --name=$NAME "$SOURCE" "$VMPATH" && echo "VMX deployed from OVF"
+    ovftool --allowExtraConfig -tt=vmx --lax --name=$NAME "$SOURCE" "$VMPATH" && echo "VMX deployed from OVF"
     # Change bridged to nat in .vmx file 'ethernet0.connectionType = "bridged"'
     sed -i .bak 's/bridged/nat/' "$VMPATH/$NAME.vmwarevm/$NAME.vmx" && echo "ethernet0.connectionType = bridged -> nat"
     # Create Snapshot
