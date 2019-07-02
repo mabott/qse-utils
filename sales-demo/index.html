@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>IOPS</title>
+    <script src="../js/d3.min.js"></script>
+    <script src="../js/d3.sankey.js"></script>
+    <script src="../js/jquery.js"></script>
+    <script src="../js/jquery.tablesorter.js"></script>
+    <style>
+body{
+  background-color: #222;
+}
+#chart {
+  margin-top: 20px;
+}
+
+.node rect {
+  cursor: move;
+  fill-opacity: .9;
+  shape-rendering: crispEdges;
+}
+
+.node text {
+  pointer-events: none;
+  fill: rgba(255, 255, 255, 0.8);
+/*  text-shadow: 0 1px 0 #fff;  */
+  stroke-width: 0;
+  font-family: Helvetica;
+  font-size: 13px;
+}
+
+.link {
+  fill: none;
+  stroke: #555;
+  stroke-opacity: .2;
+}
+
+.link:hover {
+  stroke-opacity: .5;
+}
+
+.heat{
+  fill: #F61;
+}
+
+.iops{
+  fill-opacity: 0.7 !important;
+}
+
+.iops-read {
+  fill: #915bf2;
+  background-color: #915bf2;
+}
+.iops-write {
+  fill: #00ab91;
+  background-color: #00ab91;
+}
+.iops-namespace-read {
+  fill: #c0a2f8;
+  background-color: #c0a2f8;
+}
+.iops-namespace-write {
+  fill: #a2f7e9;
+  background-color: #a2f7e9;
+}
+
+#api{background-color: #555; color: white; width: 500px; border: 1px solid #444; font-size: 12px;}
+label{
+  color: #ccc;
+  font-family: Helvetica, sans-serif;
+  font-size: 12px;
+}
+
+.status{
+  color: #811;
+  width: 100%;
+  text-align: center;
+  padding-top: 200px;
+  font-size: 40px;
+  position: absolute;
+}
+
+#table{
+  border-collapse: collapse;
+  border-spacing: 0px;
+  margin-top: 80px;
+  margin-bottom: 50px;
+}
+#table th, #table td{
+  font-family: helvetica, sans-serif;
+  font-size: 13px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+#table thead th{
+  border-bottom: 1px solid #777;
+}
+
+#table th{
+  color: #ccc;
+  font-size: 18px;
+  line-height: 18px;  
+}
+#table .path{
+  color: #eee;
+}
+
+#table ul{
+  list-style-type: none;
+  margin: 0px;
+  padding: 0px;
+}
+
+#table li{
+  list-style-type: none;
+  float: left;
+  height: 6px;
+  margin: 0px;
+  padding: 0px;
+}
+
+#table .path{
+  padding-left: 6px;
+}
+
+#table tr:nth-child(odd) {background: rgba(50, 50, 50, 0.9)}
+#table tr:nth-child(even) {background: rgba(30, 30, 30, 0.9)}
+
+    </style>
+</head>
+<body>
+    <label>API Credentials: </label>
+    <input id='api' name='api' value='{"host":"192.168.11.147","port":8000,"user":"admin","password":"admin"}' />
+    <button id='runit'>Get IOPS Chart</button>
+    <div id="chart">
+      <div class="status"></div>
+    </div>
+
+    <div id="table">
+      <div class="status"></div>
+    </div>
+
+<script>
+var the_data = null;
+
+function getIOPSchart(){
+$("svg").remove();
+
+var margin = {top: 1, right: 1, bottom: 6, left: 1},
+    width = $( window ).width() - 80,
+    height = $( window ).height() - 100;
+
+var formatNumber = d3.format(",.0f"),
+    format = function(d) { return formatNumber(d) + " TWh"; },
+    color = d3.scale.category20();
+
+var svg = d3.select("#chart").append("svg")
+    .attr("width", width + margin.left + margin.right)
+    .attr("height", height + margin.top + margin.bottom)
+  .append("g")
+    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+var sankey = d3.sankey()
+    .nodeWidth(8)
+    .size([width, height]);
+
+var path = sankey.link();
+
+var iop_types = {"read":1, "write":1, "namespace-read":1, "namespace-write":1};
+
+
+    $.tablesorter.addParser({ 
+        id: 'iops', 
+        is: function(s) { 
+            return false; 
+        }, 
+        format: function(s) {
+            return s.replace(/[A-Z]B.*/, ""); 
+        }, 
+        type: 'numeric' 
+    }); 
+
+
+$(".status").html("Retrieving data");
+d3.json("/cgi-bin/iops-api2.py?api=" + $("#api").val(), function(energy) {
+  var table_str = "";
+  var max_iops = 0;
+  the_data = energy;
+
+  for(var node_id in energy.all){
+    var h = energy.all[node_id];
+    if(h["total"] > max_iops)
+      max_iops = h["total"];
+  }
+
+
+
+  for(var node_id in energy.all){
+    var h = energy.all[node_id];
+    table_str += "<tr>";
+    var iops = "<ul>";
+    for(var iop_type in iop_types){
+      if(h[iop_type] > 0)
+        iops += "<li class='iops-" + iop_type + "' style='width: " + (200 * (h[iop_type] / max_iops)) + "px;'>" + "</li>"
+    }
+    iops += "<li style='line-height: 8px; padding-left: 4px; color: #eee;'>" + h["total"].toFixed("1") + "</li>";
+    iops += "</ul>";
+    table_str += "<td>" + iops + "</td>";
+    var lbl = energy.nodes[node_id]['full_path'];
+    if(lbl.length >= 80)
+      lbl = lbl.replace(/(.{0,80}).*/, "$1 ...");
+    table_str += "<td class='path'>" + lbl + "</td>";
+    table_str += "</tr>";
+  }
+  $("#table").html("<table cellspacing='0'><thead><tr><th>IOPS</th><th>Path</th></tr></thead><tbody>" + table_str + "</tbody></table>");
+  $("#table table").tablesorter({
+        headers: {
+            0: {
+                sorter:'iops'
+            }
+        },
+        sortInitialOrder: 'desc',
+        sortList: [[0,1]]
+ });
+
+  $(".status").css({"display":"none"});
+  sankey
+      .nodes(energy.nodes)
+      .links(energy.links)
+      .nodePadding(20)
+      .layout(0);
+
+  var link = svg.append("g").selectAll(".link")
+      .data(energy.links)
+    .enter().append("path")
+      .attr("class", "link")
+      .attr("d", path)
+      .style("stroke-width", function(d) { return Math.max(1, d.dy); })
+      .sort(function(a, b) { return b.dy - a.dy; })
+
+  link.append("title")
+      .text(function(d) { return d.source.name + " → " + d.target.name + "\n" + format(d.value); });
+
+  var node = svg.append("g").selectAll(".node")
+      .data(energy.nodes)
+    .enter()
+      .append("g")
+      .filter(function(d, i) { return d.name != "other"; })
+      .attr("class", "node")
+      .attr("id", function(d){
+        return d.id;
+      })
+      .attr("transform", function(d) { return "translate(" + d.x + "," + d.y + ")"; })
+    .call(d3.behavior.drag()
+      .origin(function(d) { return d; })
+      .on("dragstart", function() { this.parentNode.appendChild(this); })
+      .on("drag", dragmove));
+
+  node.append("rect")
+      .attr("height", function(d) { return d.dy; })
+      .attr("width", sankey.nodeWidth())
+    .append("title")
+      .text(function(d) { return d.name + "\n" + format(d.value); });
+
+  node.selectAll(".heat")
+    .data(function(d) {
+        var dd = [];
+        var offset = 0;
+        if(energy['nodes'][d.id]['name'] == "/"){
+//          console.log(energy['all'][d.id.toString()]);
+        }
+        for(var t in energy['all'][d.id.toString()]){
+          if(t == 'total')
+            continue;
+          var val = energy['all'][d.id.toString()][t] / energy['all'][d.id.toString()]['total'];
+//          console.log("eq: " + energy['all'][d.id.toString()][t] + " / " + energy['all'][d.id.toString()]['total']);
+          dd.push({'type':t, 'val':val, 'offset':offset});
+          offset += val;
+        }
+        return dd;
+    })
+    .enter().append("rect")
+      .attr("class", function(d){return 'iops iops-' + d.type})
+      .attr("width", sankey.nodeWidth())
+      .attr("height", function(d){
+         var dd1 = d3.select(this.parentNode).datum();
+         return dd1.dy * d.val;
+      })
+      .attr("y", function(d){
+//         console.log(d);
+         var dd1 = d3.select(this.parentNode).datum();
+         return dd1.dy * d.offset;
+      })
+
+
+  node.append("text")
+      .attr("x", -6)
+      .attr("y", function(d) { return d.dy / 2; })
+      .attr("dy", ".35em")
+      .attr("text-anchor", "end")
+      .attr("transform", null)
+      .text(function(d) { 
+            var lbl = d.name;
+            if(lbl.length > 17)
+                lbl = lbl.replace(/(.{0,42}).*/, "$1") + "..."
+            return lbl; })
+//    .filter(function(d) { return d.x < width / 2; })
+//      .attr("x", 6 + sankey.nodeWidth())
+//      .attr("text-anchor", "start");
+
+
+  function dragmove(d) {
+    d3.select(this).attr("transform", "translate(" + d.x + "," + (d.y = Math.max(0, Math.min(height - d.dy, d3.event.y))) + ")");
+    sankey.relayout();
+    link.attr("d", path);
+  }
+});
+
+
+}
+
+$(document).ready(function(){
+  getIOPSchart();
+  $("#runit").click(function(){
+    getIOPSchart();
+  });
+
+  $('input').on('keyup', function(e) {
+      if (e.which == 13) {
+          e.preventDefault();
+          getIOPSchart();
+      }
+  });
+
+});
+</script>
+</body>
+</html>

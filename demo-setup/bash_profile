@@ -1,0 +1,4 @@
+export PATH="$PATH:/Applications/VMware Fusion.app/Contents/Library"
+export PATH="$PATH:/Applications/VMware Fusion.app/Contents/Library/VMware OVF Tool"
+
+

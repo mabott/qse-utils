@@ -1,0 +1,2 @@
+export PYTHONPATH=$PYTHONPATH:~/src/:~/src/cli/
+python -m CGIHTTPServer 8000 .

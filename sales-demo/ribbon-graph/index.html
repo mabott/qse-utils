@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Stream Graph - States Data</title>
+    <script src="//code.jquery.com/jquery-1.11.1.min.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/d3/3.4.11/d3.min.js"></script>
+    <script src="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js"></script>
+    <style>
+        body{
+            font-family: "Helvetica", "Helvitica Neue", sans-serif;
+            background-color: #111;
+        }
+
+        .curve{
+        	stroke: rgba(16, 16, 16, 0.5);
+        	stroke-width: 1;
+        	opacity: 0.6;
+        	/* fill: rgba(2); */
+        }
+
+        svg{
+            margin-left: 20px;
+        	
+        }
+
+        .tp{
+        	fill: rgba(255, 255, 255, 1.0);
+        }
+        .tp.trans{
+        	fill: transparent;
+        }
+	#server{
+		position: absolute;
+		bottom: 15px;
+		left: 15px;	
+	}
+
+    </style>
+</head>
+<body>
+<script>
+
+d3.selection.prototype.moveToFront = function() {
+  return this.each(function(){
+    this.parentNode.appendChild(this);
+  });
+};
+
+function getParameterByName(name) {
+    name = name.replace(/[\[]/, "\\[").replace(/[\]]/, "\\]");
+    var regex = new RegExp("[\\?&]" + name + "=([^&#]*)"),
+        results = regex.exec(location.search);
+    return results === null ? "" : decodeURIComponent(results[1].replace(/\+/g, " "));
+}
+
+
+var height = 700;
+var width = 1200;
+var gap = 1;
+var the_data = null;
+
+var color = d3.scale.category20();
+var stream_data = {};
+
+$(document).ready(function(){
+    $("#server").change(function(){
+       window.location.href = "?server=" + $(this).val();
+    });
+    var serverParam = getParameterByName("server");
+    if(serverParam == "")
+        serverParam = "gravytrain";
+    $('[name=server]').val( serverParam );
+    height = $(window).height() - 90;
+    width = $(window).width() + 20;
+
+    var svg = d3.select("body").append("svg")
+        .attr("width", (width+2))
+        .attr("height", (height+100));
+
+	$.getJSON("cap-daily-" + serverParam + ".json", function(data){
+        the_data = data;
+        var x_vals = [];
+        var y_dim = "y_vals";
+        var metric = "total_val";
+
+		for(var k in data){
+			if(data[k] != null){
+				x_vals.push(k);
+			}
+		}
+        x_vals.sort();
+        var bez_length = 2;
+        var step_width = width / x_vals.length;
+        var state_num = 0;
+        var pval = -1;
+
+
+
+		var highest_total = d3.values(data).reduce(function(prev, el){return prev > el[metric] ? prev : el[metric] });
+
+		for(var x_key_i=0; x_key_i<x_vals.length; x_key_i++){
+            var x_key = x_vals[x_key_i];
+
+            var points = [];
+            points.push(["M ", x_key_i*step_width+10, ",", 0].join('') );
+            points.push(["L ", x_key_i*step_width+10, ",", height+35].join('') );
+            svg.append("path")
+                .attr("d", points.join(" "))
+                .attr("stroke", "rgba(50, 50, 50, 0.9)")
+                .attr("stroke-width", 1)
+                .attr("stroke-dasharray", "10, 3")
+
+            svg.append("text")
+                .style("font-size", "11px")
+                .attr("x", x_key_i*step_width-5)
+                .attr("y", height+46)
+                .style("fill", "rgba(255, 255, 255, 0.7)")
+                .style("stroke-width", 0)
+                .text(x_key.substring(5,10).replace("-", "/"));              
+
+
+			var offset_y = 0;
+            var sorted_keys = [];
+            for (var y_key in data[x_key][y_dim])
+                sorted_keys.push([y_key, data[x_key][y_dim][y_key]['total_val']])
+            sorted_keys.sort(function(a, b) {return a[1] - b[1]});
+
+			for(var sorted_key_i=0; sorted_key_i < sorted_keys.length; sorted_key_i++){
+                y_key = sorted_keys[sorted_key_i][0];
+				if(!(y_key in stream_data))
+					stream_data[y_key] = [];
+				var local_data = {y1:offset_y, y2:offset_y + data[x_key][y_dim][y_key][metric] / highest_total};
+                if(x_key == '2003-07-01'){
+                    console.log(y_key + ": " + data[x_key][y_dim][y_key][metric] / highest_total);
+                }
+				stream_data[y_key].push(local_data);
+				offset_y = local_data.y2;
+			}
+		}
+
+        var names = ["Kevin", "Simon", "Eric", "Alix", "Zach", "Dan", "Joyce", "Scott", "Graeme"
+                , "Steve", "Tommy", "Jeff", "Pete", "Mary", "Melissa", "Jennifer", "Mark", "Zack", "Anna", "Bob", "Sue", "Kate", "Kafia"]
+		for(var state_name in stream_data){
+			var path_arr = [];
+			var val = null;
+			var label_path = [];
+			var first_val = height - height*stream_data[state_name][0].y2;
+            console.log(state_name);
+			var second_val = height - height*stream_data[state_name][1].y2;
+			pval = second_val;
+			path_arr.push("M 0," + first_val);
+			path_arr.push("L 10," + first_val);
+			path_arr.push("C " + (10+step_width/bez_length) + "," + first_val 
+                        + " " + (10+step_width/bez_length) + "," + second_val + " " 
+                        + (10+step_width) + "," + second_val);
+
+			for(var i=2; i<stream_data[state_name].length; i++){
+				val = height - height*stream_data[state_name][i].y2;
+				if(i == Math.floor(stream_data[state_name].length / 3)){
+					var val2 = height - height*stream_data[state_name][i+1].y2;
+					label_path.push("M " + (10 + i * step_width) + "," + val);
+					label_path.push("C " + (10 + i * step_width + step_width / bez_length) + "," + val + " " 
+                        + (10 + (i+1) * step_width - step_width / bez_length) + "," + val2 + " " 
+                        + (10 + (i+1) * step_width) + "," + val2);
+				}
+				else if(i > Math.floor(stream_data[state_name].length / 2) + 1 && i < Math.floor(stream_data[state_name].length / 2) + 5){
+					label_path.push("S " + (10 + i * step_width - step_width / 2) + "," + val + " " + (10 + i * step_width) + "," + val);
+				}
+				path_arr.push("S " + (10 + i * step_width - step_width / bez_length) + "," + (val) + " " + (10 + i * step_width) + "," + val);
+				pval = val;
+			}
+
+			svg.append("defs").append("path")
+			    .attr("id", "lbl-" + state_name.toLowerCase().replace(/[^a-z0-9]+/g, "_"))
+			    .attr("d", label_path);
+
+
+			first_val = height - height*stream_data[state_name][stream_data[state_name].length-1].y1;
+			second_val = height - height*stream_data[state_name][stream_data[state_name].length-2].y1;
+
+			path_arr.push("L " + (10 + (stream_data[state_name].length-1) * step_width) + "," + first_val);
+			path_arr.push("C " + (10 + (stream_data[state_name].length-1) * step_width - step_width/2) + "," + first_val + " " 
+									+ (10 + (stream_data[state_name].length-1) * step_width - step_width/2) + "," + second_val  + " "
+									+ (10 + (stream_data[state_name].length-2) * step_width) + "," + second_val);
+			pval = second_val;
+			for(var i=stream_data[state_name].length - 3; i>=0; i--){
+				val = height - height*stream_data[state_name][i].y1;
+				path_arr.push("S " + (10 + i * step_width + step_width / 2) + "," + val + " " + (10 + i * step_width) + "," + val);
+			}
+
+			first_val = height - height*stream_data[state_name][0].y1;
+			path_arr.push("L 0," + first_val);
+
+//			console.log(path_arr);
+/* */
+			var thing = svg.append("g")
+					    .attr("id", "g-" + state_name.toLowerCase().replace(/[^a-z0-9]+/g, "_"));
+
+			thing.append("path")
+				.attr("class", "curve")
+    			.attr("id", "curve_" + state_name.toLowerCase())
+    			.attr("d", path_arr.join(" "))
+    			.attr("fill", color(state_num))
+    			.on("mouseover",function(){
+				  var sel = d3.select(this.parentNode);
+				  sel.moveToFront();
+				  $(this).css({"opacity":1.0, "stroke-width":"1", "stroke":"rgba(255, 255, 255, 1.0)"});
+				  $(this).tooltip({title:state_name}).tooltip("show");
+				  $(this).parent().find('textPath').attr("class", "tp");
+				})
+    			.on("mouseout",function(){
+				  var sel = d3.select(this);
+				  $(this).css({"opacity":0.6, "stroke-width":"", "stroke":""});
+				  $(this).parent().find('textPath').attr("class", "tp trans");
+				});
+
+			thing.append("text")
+			    .style("font-size", "18px")
+			  .append("textPath")
+			    .attr("xlink:href", "#lbl-" + state_name.toLowerCase().replace(/[^a-z0-9]+/g, "_"))
+			    .attr("class", "tp trans")
+			    .text(state_name);			    
+
+    		state_num++;
+//*/
+		}
+        svg.selectAll("g").attr("transform", "translate(0,20)");
+
+	});
+});
+
+</script>
+
+<select id='server' name='server'>
+<option value='gravytrain'>gravytrain</option>
+</select>
+
+</body>
+</html>
+
